@@ -1,0 +1,884 @@
+---
+title: "ML-Assignment 5"
+output: html_notebook
+---
+
+For this assignment, you will be working with recidivism forecasting challenge dataset made available by National Institute of Justice. You can find the description of variables in the codebook.
+
+# The goal is to predict Recidivism_Within_3years variable using the other variables/features in the data.
+
+```{r}
+# Let's read our data
+data = read.csv("C:/Users/CSC/Downloads/NIJ_s_Recidivism_Challenge_Full_Dataset_20240402.csv", header = TRUE) 
+data
+```
+
+```{r}
+str(data)
+```
+# Section 1. Data Cleaning & Exploration
+# Remove the first column, as it is a unique identifier and not used in predicting recidivism. Remove the variables: Recidivism_Arrest_Year1, Recidivism_Arrest_Year2, Recidivism_Arrest_Year3 These variables show whether recidivism occurred in year1, year2, and year 3 after arrest. Take a summary of the data and explore the result. How many categorical and numerical variables are there in the dataset?
+
+```{r}
+# Removing the columns not required:
+data = subset(data, select = -c(ID, Recidivism_Arrest_Year1, Recidivism_Arrest_Year2, Recidivism_Arrest_Year3))
+```
+
+```{r}
+# Let's explore the data set
+summary(data)
+```
+
+# As per the description of the variables from our data set and the summary, we can conclude by stating that:
+
+The categorical variables:
+1. Gender
+2. Race
+3. Age_at_Release
+4. Gang_Affiliated
+5. Supervision_Risk_Score_First
+6. Supervision_Level_First
+7. Education_Level
+8. Dependents
+9. Prison_Offense
+10. Prison_Years
+11. Prior_Arrest_Episodes_Felony
+12. Prior_Arrest_Episodes_Misdemeanor
+13. Prior_Arrest_Episodes_Violent
+14. Prior_Arrest_Episodes_Property
+15. Prior_Arrest_Episodes_Drug
+16. Prior_Arrest_Episodes_PPViolationCharges
+17. Prior_Arrest_Episodes_DomesticViolenceCharges
+18. Prior_Arrest_Episodes_GunCharges
+19. Prior_Conviction_Episodes_Felony
+20. Prior_Conviction_Episodes_Misdemeanor
+21. Prior_Conviction_Episodes_Violent
+22. Prior_Conviction_Episodes_Property
+23. Prior_Conviction_Episodes_Drug
+24. Prior_Conviction_Episodes_PPViolationCharges
+25. Prior_Conviction_Episodes_DomesticViolenceCharges
+26. Prior_Conviction_Episodes_GunCharges
+27. Prior_Revocations_Parole
+28. Prior_Revocations_Probation
+29. Condition_MH_SA
+30. Condition_Cog_Ed
+31. Condition_Other
+32. Violations_ElectronicMonitoring
+33. Violations_InstructionsNotFollowed
+34. Violations_FailToReport
+35. Violations_MoveWithoutPermission
+36. Delinquency_Reports
+37. Program_Attendances
+38. Program_UnexcusedAbsences
+39. Residence_Changes
+40. Employment_Exempt
+41. Recidivism_Within_3years ( To Predict )
+
+
+The numerical variables are:
+
+42. Residence_PUMA
+43. Avg_Days_per_DrugTest
+44. DrugTests_THC_Positive
+45. DrugTests_Cocaine_Positive
+46. DrugTests_Meth_Positive
+47. DrugTests_Other_Positive
+48. Percent_Days_Employed
+49. Jobs_Per_Year
+
+# There are around 42 categorical variables including the "Recidivism_Within_3years" variable that we need to predict and 8 numerical variables. This is a a classification problem.
+
+1. (1pt) Which columns have missing values and what percentage of those columns have NAs? Note: the missing values may be represented by empty strings/values
+
+```{r}
+# Let's check our missing values that contains NAs as well as empty strings and compare the results
+missing_val_with_empty_string = sum(is.na(data) | data == "")
+print(missing_val_with_empty_string)
+missing_val = sum(is.na(data))
+print(missing_val)
+```
+
+As, we can see that there are 36,700 empty string values and in that only 28,537 values are NAs.
+
+```{r}
+colSums(is.na(data) | data == "")
+```
+# The columns having null values are: 
+# Supervision_Level_First, Gang_Affiliated, Supervision_Risk_Score_First, Prison_Offense, DrugTests_Cocaine_Positive, Percent_Days_Employed, Avg_Days_per_DrugTest, DrugTests_Meth_Positive, Jobs_Per_Year, DrugTests_THC_Positive, DrugTests_Other_Positive
+
+```{r}
+val = ((35700 - 28536) / 35700)*100
+cat("The percentage of NA's are:",val)
+```
+Now, let's convert our empty strings to NA's as well
+
+```{r}
+replace_empty_strings <- function(x) {
+  x[x == ""] <- NA
+  return(x)
+}
+data <- data.frame(lapply(data, replace_empty_strings)) 
+```
+
+2. (2pt)Read the data description carefully. Based on data description, convert categorical variables to factors.
+
+```{r}
+# Let's extract the character variables
+char_vars <- sapply(data, is.character)
+# Convert those variables to factor
+data[char_vars] <- lapply(data[char_vars], as.factor)
+str(data)
+```
+
+3. (2pt) Some ordinal variables such as the ones indicating prior arrests have a value “10 or more”, convert this value to 10 so these variables can be represented as numeric indices
+
+# First of all, let's extract ordinal variables manually by looking at our data set, it's structure and summary:
+# The variables that needs to be converted to numeric are:
+
+Dependents, Prior_Arrest_Episodes_Felony, Prior_Arrest_Episodes_Misd, Prior_Arrest_Episodes_Violent, Prior_Arrest_Episodes_Property, Prior_Arrest_Episodes_Drug, Prior_Arrest_Episodes_PPViolationCharges, Prior_Conviction_Episodes_Felony, Prior_Conviction_Episodes_Misd, Prior_Conviction_Episodes_Prop, Prior_Conviction_Episodes_Drug, Delinquency_Reports, Program_Attendances, Program_UnexcusedAbsences, Residence_Changes
+
+```{r}
+data$Dependents = ifelse(data$Dependents == "3 or more", 3, as.numeric(data$Dependents))
+data$Prior_Arrest_Episodes_Felony = ifelse(data$Prior_Arrest_Episodes_Felony == "10 or more", 10, as.numeric(data$Prior_Arrest_Episodes_Felony))
+data$Prior_Arrest_Episodes_Misd = ifelse(data$Prior_Arrest_Episodes_Misd == "6 or more", 6, as.numeric(data$Prior_Arrest_Episodes_Misd))
+data$Prior_Arrest_Episodes_Violent = ifelse(data$Prior_Arrest_Episodes_Violent == "3 or more", 3, as.numeric(data$Prior_Arrest_Episodes_Violent))
+data$Prior_Arrest_Episodes_Property = ifelse(data$Prior_Arrest_Episodes_Property == "5 or more", 5, as.numeric(data$Prior_Arrest_Episodes_Property))
+data$Prior_Arrest_Episodes_Drug = ifelse(data$Prior_Arrest_Episodes_Drug == "5 or more", 5, as.numeric(data$Prior_Arrest_Episodes_Drug))
+data$Prior_Arrest_Episodes_PPViolationCharges = ifelse(data$Prior_Arrest_Episodes_PPViolationCharges == "5 or more", 5, as.numeric(data$Prior_Arrest_Episodes_PPViolationCharges))
+data$Prior_Conviction_Episodes_Felony = ifelse(data$Prior_Conviction_Episodes_Felony == "3 or more", 3, as.numeric(data$Prior_Conviction_Episodes_Felony))
+data$Prior_Conviction_Episodes_Misd = ifelse(data$Prior_Conviction_Episodes_Misd == "4 or more", 4, as.numeric(data$Prior_Conviction_Episodes_Misd))
+data$Prior_Conviction_Episodes_Prop = ifelse(data$Prior_Conviction_Episodes_Prop == "3 or more", 3, as.numeric(data$Prior_Conviction_Episodes_Prop))
+data$Prior_Conviction_Episodes_Drug = ifelse(data$Prior_Conviction_Episodes_Drug == "2 or more", 2, as.numeric(data$Prior_Conviction_Episodes_Drug))
+data$Delinquency_Reports = ifelse(data$Delinquency_Reports == "4 or more", 4, as.numeric(data$Delinquency_Reports))
+data$Program_Attendances = ifelse(data$Program_Attendances == "10 or more", 10, as.numeric(data$Program_Attendances))
+data$Program_UnexcusedAbsences = ifelse(data$Program_UnexcusedAbsences == "3 or more", 3, as.numeric(data$Program_UnexcusedAbsences))
+data$Residence_Changes = ifelse(data$Residence_Changes == "3 or more", 3, as.numeric(data$Residence_Changes))
+
+```
+
+
+```{r}
+str(data)
+```
+
+4. (2pt)Use statistical tests and plots to explore the relationship between the target variable Recidivism_Within_3years and all other features in the dataset. Interpret the tests and plots
+
+# Our target variable - Recidivism_Within_3years is a binary categorical variable.
+# According to my knowledge regarding statistical tests and plots:
+
+# 1. If both variables are qualitative/categorical use chi square test of independence and mosaic plots
+# 2. If one variable is qualitative/categorical and the other is numeric/quantitative use side by side box plots, and:
+#    2.1. If numeric variable is continuous use t-test ( if categorical variable has two levels/groups) or use ANOVA ( if it has three or more levels)
+#    2.2. If numeric variable is ordinal, use Kruskal-Wallis test
+
+```{r}
+# Let's create a function to perform the chi-square test
+chi_test = function(var, target) {
+  chi_sq = chisq.test(var, target)
+  return(chi_sq)
+}
+
+# Define a vector of variables to perform the chi-square test on
+cat_var = c(
+  "Gender",
+  "Race",
+  "Age_at_Release",
+  "Gang_Affiliated",
+  "Supervision_Level_First",
+  "Education_Level",
+  "Prison_Offense",
+  "Prison_Years",
+  "Prior_Arrest_Episodes_DVCharges",
+  "Prior_Arrest_Episodes_GunCharges",
+  "Prior_Conviction_Episodes_Viol",
+  "Prior_Conviction_Episodes_PPViolationCharges",
+  "Prior_Conviction_Episodes_DomesticViolenceCharges",
+  "Prior_Conviction_Episodes_GunCharges",      
+  "Prior_Revocations_Parole",                
+  "Prior_Revocations_Probation",                      
+  "Condition_MH_SA",                            
+  "Condition_Cog_Ed",                                 
+  "Condition_Other",                                  
+  "Violations_ElectronicMonitoring",                  
+  "Violations_Instruction",                           
+  "Violations_FailToReport",                          
+  "Violations_MoveWithoutPermission",
+  "Employment_Exempt"
+)
+# Perform chi-square tests for each variable and print the results
+for (var in cat_var) {
+  chi_sq = chi_test(data[[var]], data$Recidivism_Within_3years)
+  cat("The chi-square test results for", var, "are:\n")
+  print(chi_sq)
+}
+```
+# If the p-value is less than 0.05 (commonly chosen significance level), it implies that there is strong evidence to reject the null hypothesis, indicating a significant association between the variables being tested. On the other hand, if the p-value is greater than 0.05, it suggests that there is not enough evidence to reject the null hypothesis, indicating a lack of significant association between the variables.
+
+# Therefore, with this information above we can say that the variable - Violations_ElectronicMonitoring holds no association with the target variable.
+
+For numerical variables, we'll use t-test
+
+
+```{r}
+# Let's create a function to perform the t-test
+perform_t_test = function(var, target, data) {
+  t_test_result = t.test(data[[var]] ~ data[[target]])
+  return(t_test_result)
+}
+# Define a vector of variables to perform the t-test on
+num_vars <- c("Residence_PUMA", "Supervision_Risk_Score_First","Dependents", "Prior_Arrest_Episodes_Felony", "Prior_Arrest_Episodes_Misd", "Prior_Arrest_Episodes_Violent", "Prior_Arrest_Episodes_Property", "Prior_Arrest_Episodes_Drug", "Prior_Arrest_Episodes_PPViolationCharges", "Prior_Conviction_Episodes_Felony", "Prior_Conviction_Episodes_Drug", "Delinquency_Reports", "Program_Attendances", "Program_UnexcusedAbsences","Residence_Changes","Avg_Days_per_DrugTest","DrugTests_THC_Positive","DrugTests_Cocaine_Positive", "DrugTests_Meth_Positive","DrugTests_Other_Positive","Percent_Days_Employed","Jobs_Per_Year")
+
+# Perform t-test for each variable and print the results
+for (var in num_vars) {
+  t_test_result = perform_t_test(var, "Recidivism_Within_3years", data)
+  cat("The t test results for", var, "are:\n")
+  print(t_test_result)
+}
+```
+
+# As per our test results above we can say that the variable - Avg_Days_per_DrugTest holds no association with the target variable. 
+
+# Do NOT remove any variable yet. We will use other techniques such as regularization or models with embedded variable selections (such as tree based models) in this assignment
+
+6. (1pt) The dataset has a binary variable Training_Sample which takes values one or zero if the sample is in the train or test sets, respectively. Split the data to train and test set based on this variable. Then remove the variable.
+
+```{r}
+train_data = subset(data, Training_Sample == 1)
+test_data = subset(data, Training_Sample == 0)
+
+# Now let's remove our variable from both train and test data
+train_data = subset(train_data, select = -c(Training_Sample))
+test_data = subset(test_data, select = -c(Training_Sample))
+```
+
+7. (3pt) This dataset has some missing values. Read the codebook carefully and decide about what imputation method you want to use. Don’t just use a simple mean or mode imputation for all variables. Decide about data imputation based on the description of each variable and any pattern you observe in the missing values. For instance, it looks like individuals who didn’t have a drug test are missing all drug related variables. For those individuals, you can impute the missing drug values with zero but create an additional indicator variable such as “drug_imputed” which takes the value “true” if the individual is missing drug related variables and false otherwise (see chapter 13 of the book, machine learning with R, the section on “simple imputation with missing value indicators”). If you use any statistics to impute missing values, make sure they are computed based on the training data only to avoid leakage.
+
+# Categorical Variables having missing values: Supervision_Level_First, Gang_Affiliated, Prison_Offense
+# Numerical Variables having missing values: Supervision_Risk_Score_First, DrugTests_Cocaine_Positive,Percent_Days_Employed, Avg_Days_per_DrugTest,DrugTests_Meth_Positive, Jobs_Per_Year, DrugTests_THC_Positive, DrugTests_Other_Positive
+
+As per my research, 
+-> Supervision_Level_First and Gang_Affiliated variables could use mode imputation as they are categorical variables with discrete categories, thus mode imputation aligns well with the nature of these variables. It provides a reasonable estimate for missing values based on the observed data.
+
+# We are handling missing values for both - train and test data but using train data for imputation
+```{r, cache=TRUE}
+# Calculate mode for Supervision_Level_First
+mode_value = names(sort(-table(train_data$Supervision_Level_First)))[1]
+
+# Replace missing values with the mode
+train_data$Supervision_Level_First[is.na(train_data$Supervision_Level_First)] = mode_value
+test_data$Supervision_Level_First[is.na(test_data$Supervision_Level_First)] = mode_value
+
+# Calculate mode for Gang_Affiliated
+mode_value = names(sort(-table(train_data$Gang_Affiliated)))[1]
+
+# Replace missing values with the mode
+train_data$Gang_Affiliated[is.na(train_data$Gang_Affiliated)] = mode_value
+test_data$Gang_Affiliated[is.na(test_data$Gang_Affiliated)] = mode_value
+
+```
+
+-> Since Prison_Offense is a categorical variable with multiple possible categories, a separate category imputation approach would be suitable. Missing values can be replaced with a separate category like "Unknown" to indicate the absence of information
+
+```{r}
+sum(is.na(train_data$Prison_Offense))
+sum(is.na(test_data$Prison_Offense))
+```
+
+```{r}
+# Separate category imputation for Prison_Offense
+
+train_data$Prison_Offense <- ifelse(is.na(train_data$Prison_Offense), "Unknown", train_data$Prison_Offense)
+test_data$Prison_Offense <- ifelse(is.na(test_data$Prison_Offense), "Unknown", train_data$Prison_Offense)
+
+train_data$Prison_Offense <- factor(train_data$Prison_Offense)
+test_data$Prison_Offense <- factor(test_data$Prison_Offense)
+```
+-> Supervision_Risk_Score_First numerical variable represent a risk score associated with supervision, therefore it's better to use median
+```{r}
+# Median imputation for Supervision_Risk_Score_First
+
+median_score = median(train_data$Supervision_Risk_Score_First, na.rm = TRUE)
+train_data$Supervision_Risk_Score_First[is.na(train_data$Supervision_Risk_Score_First)] = median_score
+test_data$Supervision_Risk_Score_First[is.na(test_data$Supervision_Risk_Score_First)] = median_score
+```
+
+
+-> DrugTests_Cocaine_Positive, DrugTests_Meth_Positive, DrugTests_THC_Positive, DrugTests_Other_Positive numerical variables likely represent the number of positive drug tests for different substances. Since missing values in these variables likely correspond to individuals who did not undergo drug testing, we could impute these missing values with zeros, indicating no positive tests
+
+```{r}
+# Impute missing drug test variables with zeros 
+drug_vars = c("DrugTests_Cocaine_Positive", "DrugTests_Meth_Positive", "DrugTests_THC_Positive", "DrugTests_Other_Positive")
+for (var in drug_vars) {
+  train_data[[var]] = ifelse(is.na(train_data[[var]]), 0, train_data[[var]])
+  test_data[[var]] = ifelse(is.na(test_data[[var]]), 0, test_data[[var]]) 
+}
+```
+
+-> Percent_Days_Employed, Avg_Days_per_DrugTest, Jobs_Per_Year numerical variables represent employment-related information. For Percent_Days_Employed and Jobs_Per_Year, median imputation could be suitable, replacing missing values with the median value of each respective variable.
+But, For Avg_Days_per_DrugTest, since missing values may indicate individuals who did not undergo drug testing, we can impute zeros with an additional indicator variable, similar to the drug test variables.
+
+```{r}
+
+# Median imputation for Percent_Days_Employed
+median_days_employed <- median(train_data$Percent_Days_Employed, na.rm = TRUE)
+train_data$Percent_Days_Employed[is.na(train_data$Percent_Days_Employed)] = median_days_employed
+test_data$Percent_Days_Employed[is.na(test_data$Percent_Days_Employed)] = median_days_employed
+
+
+# Median imputation for Avg_Days_per_DrugTest
+median_avg_days <- median(train_data$Avg_Days_per_DrugTest, na.rm = TRUE)
+train_data$Avg_Days_per_DrugTest[is.na(train_data$Avg_Days_per_DrugTest)] = median_avg_days
+test_data$Avg_Days_per_DrugTest[is.na(test_data$Avg_Days_per_DrugTest)] = median_avg_days
+
+
+# Median imputation for Jobs_Per_Year
+median_jobs_per_year <- median(train_data$Jobs_Per_Year, na.rm = TRUE)
+train_data$Jobs_Per_Year[is.na(train_data$Jobs_Per_Year)] = median_jobs_per_year
+test_data$Jobs_Per_Year[is.na(test_data$Jobs_Per_Year)] = median_jobs_per_year
+
+```
+
+Let's check if, we have removed the missing values:
+```{r}
+sum(is.na(train_data))
+sum(is.na(test_data))
+```
+
+Let's create a new data frame and store our test data in that for further analysis used in Shapley.
+
+```{r}
+shapley_data_used = test_data
+```
+
+
+# Creating A simple benchmark
+8. (5pt) Before we jump into building a machine learning model, we need to start with something simpler; that is a heuristic benchmark. Think of this as setting a basic benchmark without using ML, which will help us see if ML is really a better solution. Here’s how we can do it for our project: We have a variable called the 'Supervision Risk Score First' , which is the risk level assigned to someone when they first get parole. We can split this score into three groups: 'low', 'medium', and 'high' risk. For example, scores from 1 to 3 are 'low' risk, 4 to 6 are 'medium', and anything above 7 is 'high' risk. Next, we'll look at our training data and check how many people in each risk group actually went back to committing crimes (i.e., Recidivism_Within_3years=true) . Let’s say in the past, 60% of the people with a 'high' risk score ended up committing crimes again. We'll use this same percentage, 60%, as our predicted probability for any new person with a 'high' risk score. Get the predictions of this benchmark model for the test data, create a cross table ( confusion matrix) of predicted test labels vs true test labels and compute precision, recall and F1 score for the class with Recidivism_Within_3years=true
+
+
+```{r}
+# Defining the score ranges for each risk group
+low_range = 1:3
+medium_range = 4:6
+high_range = 7:10
+
+train_data$risk_group <- cut(train_data$Supervision_Risk_Score_First, 
+                       breaks = c(-10, max(low_range), max(medium_range), 10),
+                       labels = c("low", "medium", "high"),
+                       include.lowest = TRUE)
+test_data$risk_group <- cut(test_data$Supervision_Risk_Score_First, 
+                       breaks = c(-10, max(low_range), max(medium_range), 10),
+                       labels = c("low", "medium", "high"),
+                       include.lowest = TRUE)
+
+# Display the count of individuals in each risk group
+table(train_data$risk_group)
+table(test_data$risk_group)
+```
+
+-> Number of individuals in each risk group who actually went back to committing crimes 
+```{r}
+# Calculate the number of individuals in each risk group who recidivated
+recidivism_counts = table(train_data$risk_group, train_data$Recidivism_Within_3years == "true")
+
+# Display the counts of recidivism for each risk group
+recidivism_counts
+
+```
+
+This shows that there is high number of individuals who had high risk score and went back to committing crimes.
+
+```{r}
+# The percentage would be:
+
+high_risk_committing_crime = (5190/(1185+4046+5190)) * 100
+high_risk_committing_crime
+```
+
+As per our question prompt - " We'll use this same percentage, 60%, as our predicted probability for any new person with a 'high' risk score."
+In our case, we'll use 49.80% as our predicted probability.
+
+```{r}
+recidivism_counts = table(test_data$risk_group, test_data$Recidivism_Within_3years == "true")
+
+# Display the counts of recidivism for each risk group
+recidivism_counts
+```
+
+The results as per our test data matrix:
+```{r}
+# Calculate precision for high class
+precision_high <- recidivism_counts["high", "TRUE"] / sum(recidivism_counts["high", ])
+recall_high = recidivism_counts["high", "TRUE"] / sum(recidivism_counts[, "TRUE"])
+f1_score_high = 2 * (precision_high * recall_high) / (precision_high + recall_high)
+print(paste("The precision is:", precision_high))
+print(paste("The recall is:", recall_high))
+print(paste("The f-1 score is:", f1_score_high))
+```
+
+
+# Training ML models
+
+9. After cleaning and exploring data and creating a simple benchmark, we are ready to train machine learning models to predict Recidivism_Within_3years . We will examine four categories of models: Regularized logistic regression, Tree-based Ensemble models, SVM, and neural networks with drop out.
+# Section 3.1 Creating Regularized Linear Regression Models
+
+10. (2pt) Set.seed(1) and train a Lasso Logistic Regression model using “glmnet” and “caret” as explained in the lectures to predict the Recidivism_Within_3years. Use 5 fold cross validation and Tune the lambda parameter) Note: You do not need to worry about scaling your test or train data, glmnet will automatically do it for you.
+
+```{r}
+set.seed(1)
+# install.packages("glmnet")
+library(caret)
+library(glmnet)
+# install.packages('data.table')
+# install.packages("ggplot2")
+library(ggplot2)
+library(lattice)
+library(data.table)
+library(mltools)
+```
+
+```{r}
+train_control = trainControl(method = "cv", number = 5)
+
+# Train the Lasso Logistic Regression model with glmnet
+lasso_model = train(
+  Recidivism_Within_3years ~ .,
+  data = train_data,  # Assuming train_data is your training dataset
+  method = "glmnet",
+  trControl = train_control,
+  family = "binomial",
+  metric = "Kappa",
+  tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-3, 3, length = 100))
+)
+
+print(lasso_model)
+lasso_prediction = predict(lasso_model, test_data)
+confusionMatrix(lasso_prediction, test_data$Recidivism_Within_3years)
+```
+
+```{r}
+best_lambda = lasso_model$bestTune$lambda
+predictors <- setdiff(names(train_data), "Recidivism_Within_3years")
+final_model <- glmnet(as.matrix(train_data[, predictors]), as.factor(train_data[, "Recidivism_Within_3years"]), 
+                      alpha = 1, lambda = best_lambda, family = "binomial")
+coefficients = coef(final_model)
+coefficients
+
+zero_coefficients <- coefficients == 0
+zero_coefficients
+```
+
+There are some variables having zero coefficients.
+As per my knowledge, Shrinking coefficients to zero means that the corresponding predictor variables are considered irrelevant by the model for predicting the outcome.
+
+11. (1pt) set.seed(1) again and train a Ridge logistic regression model using 5 fold cross validation and tune lambda as you did for lasso.
+
+```{r}
+set.seed(1)
+
+ridge_model <- train(as.formula(Recidivism_Within_3years ~ .), 
+                     data = train_data, 
+                     method = "glmnet",
+                     trControl = train_control,
+                     tuneGrid = expand.grid(alpha = 0, lambda = seq(0.01, 1, length = 100)),
+                     family = "binomial")
+
+print(ridge_model)
+
+ridge_prediction = predict(ridge_model, test_data)
+confusionMatrix(ridge_prediction, test_data$Recidivism_Within_3years)
+
+best_lambda_ridge <- ridge_model$bestTune$lambda
+final_model_ridge <- glmnet(as.matrix(train_data[, predictors]), as.factor(train_data[, "Recidivism_Within_3years"]), 
+                            alpha = 0, lambda = best_lambda_ridge, family = "binomial")
+
+final_model_ridge
+
+```
+
+12. (1 pt) set.seed(1) again and train an Elastic net logistic regression model using 5 fold cross validation and tune lambda and alpha.
+
+```{r}
+# Set seed for reproducibility
+set.seed(1)
+
+# Train the Elastic Net Logistic Regression model with cross-validation
+elastic_net_model <- train(as.formula(Recidivism_Within_3years ~ .,), 
+                           data = train_data, 
+                           method = "glmnet",
+                           trControl = train_control,
+                           tuneGrid = expand.grid(alpha = seq(0, 1, length = 10), 
+                                                  lambda = seq(0.01, 1, length = 100)),
+                           family = "binomial")
+
+# Print the tuned parameters
+print(elastic_net_model)
+
+# predicting our model
+elastic_prediction = predict(elastic_net_model, test_data)
+
+
+# Get the best lambda and alpha values
+best_alpha <- elastic_net_model$bestTune$alpha
+best_lambda_elastic <- elastic_net_model$bestTune$lambda
+
+# Final model with best alpha and lambda
+final_model_elastic <- glmnet(as.matrix(train_data[, predictors]), as.factor(train_data[, "Recidivism_Within_3years"]), 
+                              alpha = best_alpha, lambda = best_lambda_elastic, family = "binomial")
+
+# Summary of the final Elastic Net model
+print(final_model_elastic)
+```
+
+
+Section 3.2 Creating Tree-Ensemble and SVM Models
+
+13. (2 pt) Set.seed(1) and Use Caret package with “rf” method to train a random forest model on the training data to predict Recidivism_Within_3years. Use 5-fold cross validation and let caret auto-tune the model. (Note: use importance=T in your train method so it computes the variable importance while building the model). Be patient. This model may take a long time to train.
+
+Use caret’s varImp function to get the variable importance for the random forest model. Which variables were most predictive in the random forest model?
+
+```{r, cache=TRUE}
+set.seed(1)
+
+rf_model <- train(as.formula(Recidivism_Within_3years ~ .,), 
+                  data = train_data, 
+                  method = "rf",
+                  trControl = train_control,
+                  tuneLength = 5,  
+                  importance = TRUE)
+
+print(rf_model)
+
+# predicting our model
+random_forest_prediction = predict(rf_model, test_data)
+
+# Creating a confusion matrix
+table(random_forest_prediction, test_data$Recidivism_Within_3years)
+```
+
+
+14. (1 pt) Set.seed(1) and Use Caret package with “gbm” method to train a Gradient Boosted Tree model on the training data use 5 fold cross validation and let caret auto-tune the model.
+
+```{r, cache=TRUE}
+set.seed(1)
+
+gbm_model <- train(as.formula(Recidivism_Within_3years ~ .,), 
+                   data = train_data, 
+                   method = "gbm",
+                   trControl = train_control,
+                   tuneLength = 5)  # Number of models to evaluate
+
+# Print the trained model
+print(gbm_model)
+
+# predicting our model
+gbm_prediction = predict(gbm_model, test_data)
+
+# Creating a confusion matrix
+table(gbm_prediction, test_data$Recidivism_Within_3years)
+```
+
+
+15. (2 pt) Set.seed(1) and Use Caret package with “svmLinear” method to train a support vector machine model on the training data. Unlike tree based models, SVM requires scaling data. Use
+preProc=c(“center”,”scale”) inside the trainControl method to normalize your data. Use 5 fold cross validation and let caret auto-tune the model.
+
+```{r, cache=TRUE}
+
+set.seed(1)
+
+svm_model <- train(as.formula(Recidivism_Within_3years ~ .,), 
+                   data = train_data, 
+                   method = "svmLinear",
+                   trControl = trainControl(method = "cv", 
+                                            number = 5, 
+                                            preProc = c("center", "scale")),
+                   tuneLength = 5)  # Number of models to evaluate
+
+# Print the trained model
+print(svm_model)
+
+# predicting our model
+svm_prediction = predict(svm_model, test_data)
+
+# Creating a confusion matrix
+table(svm_prediction, test_data$Recidivism_Within_3years)
+
+```
+
+Explain what is hyper-parameter “c”? repeat the above steps but set train method to “svmRadial” to use radial basis function as kernel
+
+The hyper-parameter "c" is regularization parameter in SVM and according to your model results, getting c value as 1 means that the model's optimization process places equal importance on maximizing the margin between classes and minimizing the classification error on the training data.
+
+```{r, cache=TRUE}
+set.seed(1)
+
+svm_model_radial <- train(as.formula(Recidivism_Within_3years ~ .,), 
+                   data = train_data, 
+                   method = "svmRadial",
+                   trControl = trainControl(method = "cv", 
+                                            number = 5, 
+                                            preProc = c("center", "scale")),
+                   tuneLength = 5)  # Number of models to evaluate
+
+# Print the trained model
+print(svm_model_radial)
+
+# predicting our model
+svm_radial_prediction = predict(svm_model_radial, test_data)
+svm_radial_prediction
+# Creating a confusion matrix
+table(svm_radial_prediction, test_data$Recidivism_Within_3years)
+```
+
+16. (2pt) Use “resamples” method to compare the cross validation metrics of the seven models you created above (LASSO, RIDGE, elastic net, randomforest, gbm, svmlinear, and svmradial). Which models have better cross validation performance? In a sentence or two, interpret the results.
+
+```{r, cache=TRUE}
+# Combine the models into a list
+models <- list(lasso = lasso_model,
+               ridge = ridge_model,
+               elastic_net = elastic_net_model,
+               random_forest = rf_model,
+               gbm = gbm_model,
+               svm_linear = svm_model,
+               svm_radial = svm_model_radial)
+
+# Compare the models using resamples
+model_resamples <- resamples(models)
+
+# Summarize the results
+summary(model_resamples)
+
+```
+
+# According to this comparison chart, gbm model having 73% accuracy rate with the highest kappa as 0.44 among other models. Our best model chosen here is gbm.
+
+
+# Section 3.3 Creating a Neural Network Model
+
+17. Split the training data to train – validation set. (use 90% for training and 10% for validation)
+
+```{r}
+library(caret)
+# Set seed for reproducibility
+set.seed(1)
+
+# Create an index for splitting the data
+index = createDataPartition(train_data$Recidivism_Within_3years, p = 0.9, list = FALSE)
+
+# Split the data into training and validation sets
+training_data = train_data[index, ]
+validation_data = train_data[-index, ]
+```
+
+
+
+Let's divide our data in two parts - one having the features and the other having the target label for training, validation and test.
+
+```{r}
+train_labels = as.numeric(training_data$Recidivism_Within_3years)
+val_labels = as.numeric(validation_data$Recidivism_Within_3years)
+test_labels = as.numeric(test_data$Recidivism_Within_3years)
+
+# Removing the target variable from all three data divisions
+training_data = training_data[, !names(training_data) %in% c("Recidivism_Within_3years")]
+validation_data = validation_data[, !names(validation_data) %in% c("Recidivism_Within_3years")]
+test_data = test_data[, !names(test_data) %in% c("Recidivism_Within_3years")]
+shapley_test_data = test_data
+```
+
+
+18. (3 pt) One-hot encode your categorical variables and scale your numeric variables.
+
+
+```{r}
+# Let's first scale numerical variables first, we already have - num_vars list
+
+training_data_scaled = scale(training_data[, num_vars])
+col_means_train = attr(training_data_scaled, "scaled:center")
+col_stddevs_train = attr(training_data_scaled, "scaled:scale")
+
+test_data_scaled = scale(test_data[, num_vars], center = col_means_train, scale = col_stddevs_train)
+validation_data_scaled = scale(validation_data[, num_vars], center = col_means_train, scale = col_stddevs_train)
+
+training_data= data.frame(one_hot(data.table(training_data)))
+validation_data= data.frame(one_hot(data.table(validation_data)))
+test_data= data.frame(one_hot(data.table(test_data)))
+```
+
+19. (5 pt) Create a Neural Network model with at least two hidden layers to predict Recidivism_Within_3year. Use the training and validation set you created above. Add a drop out layer after each hidden layer to regularize your neural network model. Use tfruns package to tune your hyper-parameters including the drop out factors. Display the table returned by trfuns.
+
+```{r}
+#install.packages("tfruns")
+#install.packages("keras")
+library(tfruns)
+library(keras)
+library(caret)
+library(ggplot2)
+library(gmodels)
+```
+
+```{r}
+# First, we have to convert our data frame to matrices
+train_matrix = as.matrix(training_data_scaled)
+validation_matrix = as.matrix(validation_data_scaled)
+test_matrix = as.matrix(test_data_scaled)
+
+# Converting my values from 1,2 to 0,1
+train_labels <- ifelse(train_labels == 1, 0, ifelse(train_labels == 2, 1, train_labels))
+test_labels <- ifelse(test_labels == 1, 0, ifelse(test_labels == 2, 1, test_labels))
+val_labels <- ifelse(val_labels == 1, 0, ifelse(val_labels == 2, 1, val_labels))
+```
+
+
+```{r}
+model = keras_model_sequential()
+runs = tuning_run("C:/Users/CSC/Downloads/ML_Assignment5.R",
+                  flags = list(
+                    nodes = c(64,128),
+                    learning_rate = c(0.01, 0.05, 0.001, 0.001),
+                    batch_size = c(16, 32,64, 128),
+                    dropout_rate = c(0.1,0.2,0.3,0.4)
+                  ),
+                  sample = 0.03)
+```
+
+```{r}
+# Let's check the runs
+runs = runs[order(runs$metric_val_loss), ]
+runs
+```
+
+
+20. (2 pts) Use view_run to look at your best model. Note that the best model is the model with lowest validation loss. What hyper-parameter combination is used in your best model. Does your best model still overfit?
+
+```{r}
+# As per the order, our 1st has least validation loss.
+view_run(runs$run_dir[1])
+```
+
+# As per the view_run, the best hyperparameter are:
+# 1. nodes = 128
+# 2. batch_size = 64
+# 3. activation = relu
+# 4. learning rate = 0.05
+# 5. dropout rate = 0.4
+# 6. loss = binary_crossentropy
+# 7. optimzerr = adam
+
+21. (2 pt) Now that we tuned the hyperparameters, we don’t need the validation data anymore and we can use ALL of the training data for training. Use all of your training data ( that is, train + validation data) to train a model with the best combination of hyper-parameters you found in the previous step.
+
+```{r}
+combined_train_data = rbind(training_data, validation_data)
+combined_train_data_matrix = as.matrix(combined_train_data)
+combined_train_labels = c(train_labels, val_labels)
+
+# Let's train our test model using those hyperparamters
+model <- keras_model_sequential() %>%
+  layer_flatten(input_shape = dim(combined_train_data)[2]) %>%
+  layer_dense(units = 128, activation = "relu") %>%  # Added a comma here
+  layer_dropout(rate = 0.4) %>%  # Added a comma here
+  layer_dense(units = 64, activation = "relu") %>%  # Added a comma here
+  layer_dropout(rate = 0.4) %>%  # Added a comma here
+  layer_dense(units = 1, activation = "sigmoid")
+
+model %>% compile(
+  loss = "binary_crossentropy", 
+  optimizer = optimizer_adam(lr = 0.05),
+  metrics = c("accuracy")
+)
+model
+```
+
+```{r}
+set.seed(1)
+history <- model %>% fit(
+  combined_train_data_matrix, combined_train_labels,
+  epochs = 20,
+  batch_size = 64,
+  test_data = list(test_matrix, test_labels)
+)
+print(history)
+```
+
+
+22. (3pt) Out of all the models you tried which models has the best validation performance? Get the predictions of this best model on the test data and report F1 score, precision and recall. Compare your best model to the simple benchmark you created earlier.
+
+# According to the accuracy metric, ANN model is giving 71% while gbm is giving 73%, therefore we'll go with the gbm moel as our best model so far.
+
+```{r}
+# Assigning values already predicted from the gbm model using the confusion matrix created above
+
+TP = 3745
+FP = 738
+FN = 1245
+
+precision = TP / (TP + FP)
+
+recall = TP / (TP + FN)
+
+f1_score = 2 * precision * recall / (precision + recall)
+
+# Print the results
+print(paste("Precision:", precision))
+print(paste("Recall:", recall))
+print(paste("F1 Score:", f1_score))
+
+```
+# Comparing the benchmark model results with the gbm model results:
+
+The precision for our benchmark model is approx 0.65 whereas, The precision for GBM model is coming out to be 0.83 which is great.
+
+#Model Interpretation using Shapley Values
+23. (3pt) Use iml package to get the Shapley values for the first 100 individuals in the test data and interpret the results (refer to responsible AI lecture ). You don’t need to get the Shapley values for each individual separately. You can call Shapley$new on df_test[1:100,] where df_test is your test set.
+
+
+```{r}
+#install.packages("iml")
+library(iml)
+library(data.table)
+
+mod = Predictor$new(gbm_model, data = shapley_test_data, type = "prob")
+shapley_val = Shapley$new(mod, shapley_test_data[1:100, ])
+plot(shapley_val)
+shapley_val
+shapley_val$results
+```
+
+#Fairness Metrics
+
+24. (5pt) This dataset has several protected attributes, the most important ones being Gender and Race.Use fairness package to explain whether your best model satisfies demographic parity, equalized odds, and predictive_rate_parity criteria with respect to Gender and Race. Interpret the fairness metrics you computed.
+
+```{r}
+# First, let's install the required packages and libraries:
+#install.packages("fairness")
+
+library(fairness)
+shapley_data_used
+shapley_data_used$pred = predict(gbm_model,shapley_test_data, type="prob")$true
+
+```
+
+```{r}
+# Let's find the demographic parity check for Race variable
+dem_parity(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Race', probs = 'pred')
+# Let's find the demographic parity check for Gender variable
+dem_parity(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Gender', probs = 'pred')
+```
+
+
+```{r}
+# Let's find the pred parity check for Race variable:
+pred_rate_parity(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Race', probs='pred')
+# Let's find the pred parity check for Gender variable 
+pred_rate_parity(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Gender', probs='pred')
+```
+
+```{r}
+#Let's find the equal odds check for Race variable:
+equal_odds(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Race', probs = 'pred')
+#Let's find the equal odds check for Gender variable:
+equal_odds(data = shapley_data_used, outcome = 'Recidivism_Within_3years', group = 'Gender', probs = 'pred')
+```
+
+
+
+
